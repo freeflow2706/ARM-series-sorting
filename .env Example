@@ -1,0 +1,20 @@
+# ARM DVD Rip Reorganization Configuration
+
+# Verzeichnis mit den ARM-gerippten DVD-Ordnern (Quelle)
+# Für Tests: INPUT_DIR=C:\Repository\ARM series sorting\test_input
+# Für Produktion: INPUT_DIR=D:\Videos\ARM_Rips
+INPUT_DIR=C:\Repository\ARM series sorting\test\test_input
+
+# Zielverzeichnis für reorganisierte Serien
+# Für Tests: OUTPUT_DIR=C:\Repository\ARM series sorting\test_output
+# Für Produktion: OUTPUT_DIR=D:\Videos\Organized_Series
+OUTPUT_DIR=C:\Repository\ARM series sorting\test\test_output
+
+# Logging Level: DEBUG, INFO, WARNING, ERROR
+LOG_LEVEL=INFO
+
+# Optionen: move (Standard) oder copy
+FILE_OPERATION=move
+
+# Automatisch Quell-Ordner löschen nach Verarbeitung? (True/False)
+DELETE_SOURCE_AFTER_MOVE=False
