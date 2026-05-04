@@ -73,6 +73,10 @@ class DVDDiscOrganizer:
         """
         Collect all episodes from this disc (extras + main feature).
 
+        Handles E00 (title track):
+        - If E00 exists in extras: It's the first episode
+        - If E00 missing: Assume it was skipped (was the title that plays all episodes), start with E01
+
         Returns:
             Dict {episode_number: file_path}
         """
@@ -93,12 +97,17 @@ class DVDDiscOrganizer:
                     if EpisodeFileNameParser.validate_episode_number(ep_num):
                         extras_episodes.append(ep_num)
                         episodes[ep_num] = video_file
-                        self.logger.debug(
-                            f"  Found extras episode: {video_file.name} (E{ep_num:02d})"
-                        )
+                        if ep_num == 0:
+                            self.logger.debug(
+                                f"  Found title track (E00): {video_file.name}"
+                            )
+                        else:
+                            self.logger.debug(
+                                f"  Found extras episode: {video_file.name} (E{ep_num:02d})"
+                            )
                     else:
                         self.logger.warning(
-                            f"  ⚠️  Episode number out of range (1-99): {video_file.name} (E{ep_num})"
+                            f"  ⚠️  Episode number out of range (0-99): {video_file.name} (E{ep_num})"
                         )
                 else:
                     self.logger.warning(
@@ -111,6 +120,11 @@ class DVDDiscOrganizer:
                 episodes[missing_ep] = main_feature_path
                 self.logger.info(
                     f"  ✓ Main feature identified as E{missing_ep:02d}: {main_feature_path.name}"
+                )
+            elif missing_ep is None and 0 not in extras_episodes:
+                # E00 not found: assume it was skipped (title track)
+                self.logger.info(
+                    f"  ℹ️  E00 not found - assuming title track was skipped, starting with E01"
                 )
         else:
             self.logger.warning(f"  ⚠️  extras folder not found in: {self.disc_folder}")

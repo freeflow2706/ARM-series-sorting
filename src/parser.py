@@ -13,9 +13,13 @@ class FolderNameParser:
 
     # Regex patterns to extract series name, season, and disc number
     PATTERNS = [
-        # Pattern 1: explicit SEASON/DISC keywords with flexible separators
+        # Pattern 1: SEASON/DISC with flexible separators (SEASON/S, DISC/D with optional underscore)
         r"(.+?)[\s_-]+(SEASON|S)[\s_-]*(\d+)[\s_-]+(DISC|D)[\s_-]*(\d+)",
-        # Pattern 2: without SEASON/DISC keywords (for edge cases)
+        # Pattern 2: S and D shorthand (e.g., S4D2, S4_D2, S4-D2)
+        r"(.+?)[\s_-]+(S)(\d+)[_-]?(D)(\d+)",
+        # Pattern 3: Just D (Disc only, no season) - for when season is in series name
+        r"(.+?)[\s_-]+(D)(\d+)$",
+        # Pattern 4: without SEASON/DISC keywords (for edge cases)
         r"(.+?)[\s_-]+(\d+)[\s_-]+(\d+)$",
     ]
 
@@ -23,6 +27,11 @@ class FolderNameParser:
     def parse(folder_name: str) -> Optional[Dict[str, any]]:
         """
         Parse a folder name to extract series name, season, and disc number.
+
+        Supports patterns:
+        - SEASON/DISC with flexible separators: "SHOW_SEASON_5_DISC_1", "SHOW_S5_D1", "SHOW_S5-DISC1"
+        - D shorthand: "SHOW_D2", "SHOW_D2"
+        - Generic: "SHOW_5_1" (last two numbers are season and disc)
 
         Args:
             folder_name: The name of the folder (without path)
@@ -33,18 +42,34 @@ class FolderNameParser:
         """
         folder_name = folder_name.strip()
 
-        # Try Pattern 1
-        match = re.match(FolderNameParser.PATTERNS[0], folder_name, re.IGNORECASE)
-        if match:
-            series_name = match.group(1).strip()
-            season = int(match.group(3))
-            disc_number = int(match.group(5))
+        # Try each pattern in order
+        for pattern_idx, pattern in enumerate(FolderNameParser.PATTERNS):
+            match = re.match(pattern, folder_name, re.IGNORECASE)
+            if match:
+                groups = match.groups()
 
-            return {
-                "series_name": series_name,
-                "season": season,
-                "disc_number": disc_number,
-            }
+                if pattern_idx == 0:  # Pattern 1: SEASON/DISC with keywords
+                    series_name = groups[0].strip()
+                    season = int(groups[2])
+                    disc_number = int(groups[4])
+                elif pattern_idx == 1:  # Pattern 2: S and D shorthand
+                    series_name = groups[0].strip()
+                    season = int(groups[2])
+                    disc_number = int(groups[4])
+                elif pattern_idx == 2:  # Pattern 3: Just D (disc only)
+                    series_name = groups[0].strip()
+                    season = 1  # Default season if not specified
+                    disc_number = int(groups[2])
+                else:  # Pattern 4: Generic numbers
+                    series_name = groups[0].strip()
+                    season = int(groups[1])
+                    disc_number = int(groups[2])
+
+                return {
+                    "series_name": series_name,
+                    "season": season,
+                    "disc_number": disc_number,
+                }
 
         return None
 
@@ -116,8 +141,8 @@ class EpisodeFileNameParser:
 
     @staticmethod
     def validate_episode_number(episode_num: int) -> bool:
-        """Validate that episode number is reasonable (1-99)."""
-        return 1 <= episode_num <= 99
+        """Validate that episode number is reasonable (0-99). E00 is valid for title track."""
+        return 0 <= episode_num <= 99
 
 
 class EpisodeMappingAnalyzer:
@@ -129,6 +154,7 @@ class EpisodeMappingAnalyzer:
         Find the missing episode number in a disc's episode list.
 
         Logic:
+        - If E00 (0) in list: Check for gaps in E01+ (Title track included)
         - If sequence [1, 2, 3] (no gaps): Main feature = max + 1
         - If sequence [1, 3, 4] (gap at 2): Main feature = 2
 
@@ -144,7 +170,24 @@ class EpisodeMappingAnalyzer:
         # Sort and remove duplicates
         unique_eps = sorted(set(episode_numbers))
 
-        # Check for gaps in the sequence
+        # If 0 is present, check for gaps in episodes 1+ (excluding E00)
+        if 0 in unique_eps:
+            eps_without_e00 = [ep for ep in unique_eps if ep > 0]
+
+            if not eps_without_e00:
+                # Only E00 exists, no other episodes
+                return None
+
+            # Check for gaps in the sequence starting from 1
+            for i, ep in enumerate(eps_without_e00):
+                expected = i + 1  # Should be 1, 2, 3, ...
+                if ep != expected:
+                    return expected
+
+            # No gap found: main feature = max + 1
+            return max(eps_without_e00) + 1
+
+        # E00 not present: Check for gaps in the sequence starting from 1
         for i, ep in enumerate(unique_eps):
             expected = i + 1  # Should be 1, 2, 3, ...
             if ep != expected:
@@ -160,13 +203,20 @@ class EpisodeMappingAnalyzer:
         """
         Map (disc_number, episode_on_disc) to final_episode_number.
 
+        Handles E00 (title track):
+        - If E00 (0) exists on a disc: All episodes get +1 offset (E00→E01, E01→E02, etc.)
+        - If E00 doesn't exist: Episodes start at 1 naturally
+
         Args:
             disc_episode_map: Dict {disc_number: [ep1, ep2, ep3, ...]}
                              Episodes are already sorted and complete for each disc
 
         Returns:
             Dict {(disc_number, episode_on_disc): final_episode_number}
-            Example: {(1, 1): 1, (1, 2): 2, (2, 1): 4, (2, 2): 5}
+
+        Examples:
+            Without E00: {(1, 1): 1, (1, 2): 2, (2, 1): 4, (2, 2): 5}
+            With E00:    {(1, 0): 1, (1, 1): 2, (1, 2): 3, (2, 0): 5, (2, 1): 6, (2, 2): 7}
         """
         mapping = {}
         episode_offset = 0
@@ -175,8 +225,18 @@ class EpisodeMappingAnalyzer:
         for disc_num in sorted(disc_episode_map.keys()):
             episodes_on_disc = sorted(disc_episode_map[disc_num])
 
+            # Check if E00 (title track) exists on this disc
+            has_e00 = 0 in episodes_on_disc
+
             for local_ep_num in episodes_on_disc:
-                final_ep_num = episode_offset + local_ep_num
+                if has_e00:
+                    # If E00 exists: all episodes get +1 offset
+                    # E00 → offset + 1, E01 → offset + 2, etc.
+                    final_ep_num = episode_offset + local_ep_num + 1
+                else:
+                    # No E00: episodes start at 1 naturally
+                    final_ep_num = episode_offset + local_ep_num
+
                 mapping[(disc_num, local_ep_num)] = final_ep_num
 
             # Update offset for next disc
