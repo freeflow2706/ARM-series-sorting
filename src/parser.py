@@ -176,7 +176,8 @@ class EpisodeMappingAnalyzer:
 
             if not eps_without_e00:
                 # Only E00 exists, no other episodes
-                return None
+                # Main feature should be E01 (first episode after title track)
+                return 1
 
             # Check for gaps in the sequence starting from 1
             for i, ep in enumerate(eps_without_e00):

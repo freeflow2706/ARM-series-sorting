@@ -105,6 +105,31 @@ def create_test_structure():
                 ),  # Disc 2: E01,E02,E04 in extras, no E00, E03 is main
             ],
         ),
+        # Show 5: BREAKING_BAD Season 6 - ONLY E00 in extras (edge case)
+        # Disc 3: only E00 (title track) - tests critical bug fix
+        # Main feature should become E01
+        (
+            "BREAKING_BAD_Season_6_Disc_{}",
+            "BREAKING_BAD",
+            6,
+            [
+                (
+                    1,
+                    [1, 2, 3, 4, 5],
+                    False,
+                ),  # Disc 1: normal disc with E01-E05, E06 is main
+                (
+                    2,
+                    [1, 2, 3, 4],
+                    False,
+                ),  # Disc 2: normal disc with E01-E04, E05 is main
+                (
+                    3,
+                    [0],
+                    False,
+                ),  # Disc 3: ONLY E00 (title) in extras, E01 should be main feature
+            ],
+        ),
     ]
 
     print("Creating test directory structure...\n")
@@ -152,15 +177,21 @@ def create_test_structure():
 
                 # Find gap in E01+
                 main_feature_local = None
-                for i, ep_num in enumerate(eps_without_e00):
-                    expected = i + 1
-                    if ep_num != expected:
-                        main_feature_local = expected
-                        break
 
-                # If no gap, main feature = max + 1
-                if main_feature_local is None:
-                    main_feature_local = max(eps_without_e00) + 1
+                if eps_without_e00:
+                    # There are episodes besides E00
+                    for i, ep_num in enumerate(eps_without_e00):
+                        expected = i + 1
+                        if ep_num != expected:
+                            main_feature_local = expected
+                            break
+
+                    # If no gap, main feature = max + 1
+                    if main_feature_local is None:
+                        main_feature_local = max(eps_without_e00) + 1
+                else:
+                    # Only E00 exists, main feature = E01
+                    main_feature_local = 1
 
                 # With E00 shift, add +1 to global
                 main_feature_global = offset + main_feature_local + 1

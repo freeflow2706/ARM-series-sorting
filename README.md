@@ -165,6 +165,14 @@ extras/ enthält: B1_t00.mp4, B1_t01.mp4, ..., B1_t09.mp4
 → Main Feature = E10 (erste fehlende Episode + E00-Offset wird automatisch berücksichtigt)
 ```
 
+**Szenario 5: NUR E00 in extras (kritischer Edge-Case) 🔴**
+```
+extras/ enthält: B3_t00.mp4
+→ E00 erkannt (Title Track) → Keine weiteren Episodes
+→ Main Feature = E01 (erste Episode nach Title Track)
+→ Output: E00→E01, MainFeature→E02
+```
+
 ## Fehlerbehandlung
 
 Bei Problemen werden Sie interaktiv gefragt:
@@ -182,7 +190,16 @@ In seltenen Fällen kann eine DVD einen Title Track (E00) UND eine Lücke in den
 - Früher: ❌ Bug - E10 wurde übersehen
 - Jetzt: ✅ Korrekt - E10 wird als Main Feature erkannt
 
-Dies wird durch die `DOCTOR_WHO` Test-Show überprüft.
+Dies wird durch die `HOUSE` Test-Show überprüft.
+
+**NUR E00 in extras (kritisch)**
+
+Falls ein Disc nur den Title Track enthält:
+- Eingabe: `B3_t00.mp4` (nur Title Track, keine Episodes)
+- Früher: ❌ Bug - Main Feature wurde ignoriert
+- Jetzt: ✅ Korrekt - Main Feature wird E01 zugeordnet
+
+Dies wird durch die `BREAKING_BAD Season 6 Disc 3` Test-Show überprüft.
 
 ## Testing
 
@@ -199,9 +216,9 @@ python test/create_test_structure.py
 Dies erstellt `test/test_input/` mit mehreren Test-Shows:
 - **BIG_BANG_THEORY**: Klassisches Format mit SEASON/DISC Keywords
 - **BREAKING_BAD**: Shorthand Format (S4_DISC)
-- **HOUSE**: Mit E00 (Title Track) - `S3D1` Format
+- **HOUSE**: Mit E00 (Title Track) + Gap - `S3D1` Format
 - **THE_OFFICE**: Alternative Formate `Season_2-D1`
-- **DOCTOR_WHO**: Edge-Case mit E00 + Gap (testet Bug-Fix) - `S12D1` Format
+- **BREAKING_BAD S06**: Kritischer Edge-Case: Nur E00 in extras - `Season_6_Disc_3` Format
 
 ### Mock-Struktur aus bestehendem Verzeichnis
 
@@ -243,10 +260,10 @@ python run.py
 | Show | Besonderheit | Testet |
 |------|---|---|
 | BIG_BANG_THEORY | Gap + Multiple Discs | Basis-Funktionalität, Disc-Übergänge |
-| BREAKING_BAD | 3 Discs, Gap in Disc 2 | Multi-Disc-Handling mit Lücken |
-| HOUSE | E00 Title Track, kein Gap | E00-Erkennung und Renummerierung |
+| BREAKING_BAD S04 | 3 Discs, Gap in Disc 2 | Multi-Disc-Handling mit Lücken |
+| HOUSE | E00 Title Track + Gap | E00-Erkennung, Renummerierung, Gap-Erkennung mit E00 |
 | THE_OFFICE | Alternative Ordnernamen | Flexible Regex-Parsing |
-| **DOCTOR_WHO** | **E00 + Gap (Edge-Case)** | **Kritischer Bug-Fix: Lückenerkennung mit Title Track** |
+| **BREAKING_BAD S06** | **NUR E00 in extras** | **Kritischer Bug-Fix: Main Feature wenn nur Title Track vorhanden** |
 
 ## Logging
 
