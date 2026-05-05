@@ -103,7 +103,7 @@ class DVDDiscOrganizer:
                             )
                         else:
                             self.logger.debug(
-                                f"  Found extras episode: {video_file.name} (E{ep_num:02d})"
+                                f"  Found episode: {video_file.name} (E{ep_num:02d})"
                             )
                     else:
                         self.logger.warning(
@@ -119,12 +119,12 @@ class DVDDiscOrganizer:
             if missing_ep is not None and main_feature_path:
                 episodes[missing_ep] = main_feature_path
                 self.logger.info(
-                    f"  ✓ Main feature identified as E{missing_ep:02d}: {main_feature_path.name}"
+                    f"  ✓ Main feature identified as E{missing_ep:02d}: {main_feature_path.name} → {self.disc_folder.name}"
                 )
             elif missing_ep is None and 0 not in extras_episodes:
                 # E00 not found: assume it was skipped (title track)
                 self.logger.info(
-                    f"  ℹ️  E00 not found - assuming title track was skipped, starting with E01"
+                    f"  ℹ️  E00 not found in {self.disc_folder.name} - Title track was skipped, starting with E01"
                 )
         else:
             self.logger.warning(f"  ⚠️  extras folder not found in: {self.disc_folder}")
@@ -251,7 +251,7 @@ class SeriesOrganizer:
                         response = self._ask_file_exists(dest_file, src_file)
                         if response == "skip":
                             self.logger.warning(
-                                f"    ⊘ Skipped (file exists): {new_filename}"
+                                f"    ⊘ Skipped (exists): {src_file} → {dest_file}"
                             )
                             continue
                         elif response == "overwrite":
@@ -261,12 +261,14 @@ class SeriesOrganizer:
                     try:
                         if self.file_operation == "move":
                             shutil.move(str(src_file), str(dest_file))
+                            operation = "Moved"
                         else:  # copy
                             shutil.copy2(str(src_file), str(dest_file))
+                            operation = "Copied"
 
-                        self.logger.info(f"    ✓ {new_filename}")
+                        self.logger.info(f"    ✓ {operation}: {src_file} → {dest_file}")
                     except Exception as e:
-                        self.logger.error(f"    ✗ Error processing {new_filename}: {e}")
+                        self.logger.error(f"    ✗ Error: {src_file} → {dest_file}: {e}")
                         all_success = False
 
                 # Delete source disc folder if move operation
@@ -279,7 +281,7 @@ class SeriesOrganizer:
                             if disc_folder.exists():
                                 shutil.rmtree(disc_folder)
                                 self.logger.info(
-                                    f"  Deleted source folder: {disc_folder.name}"
+                                    f"  ✓ Deleted source folder: {disc_folder}"
                                 )
                         except Exception as e:
                             self.logger.error(

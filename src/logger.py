@@ -20,6 +20,13 @@ class Logger:
             log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
             log_dir: Directory for log file. If None, uses output directory.
         """
+        # Fix Windows console encoding for Unicode symbols
+        if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+            try:
+                sys.stdout.reconfigure(encoding="utf-8")
+            except Exception:
+                pass  # Fall back to default if reconfigure fails
+
         self.log_level = getattr(logging, log_level, logging.INFO)
         self.log_dir = Path(log_dir) if log_dir else Path.cwd() / "logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -37,17 +44,20 @@ class Logger:
             datefmt="%Y-%m-%d %H:%M:%S",
         )
 
-        # Console handler
+        # Console handler (with UTF-8 encoding for Unicode symbols)
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(self.log_level)
         console_handler.setFormatter(formatter)
+        # Set encoding to UTF-8 to support Unicode symbols (✓, ⚠️, ❌, etc.)
+        if hasattr(console_handler, "setEncoding"):
+            console_handler.setEncoding("utf-8")
         self.logger.addHandler(console_handler)
 
         # File handler
         log_file = (
             self.log_dir / f"process_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         )
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setLevel(self.log_level)
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
