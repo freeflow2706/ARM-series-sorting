@@ -25,6 +25,9 @@ class Config:
         self.delete_source_after_move = (
             os.getenv("DELETE_SOURCE_AFTER_MOVE", "True").lower() == "true"
         )
+        self.mainfeature_placement = os.getenv(
+            "MAINFEATURE_PLACEMENT", "last_episode"
+        ).lower()
 
         # Validate configuration
         self._validate()
@@ -46,6 +49,11 @@ class Config:
                 f"FILE_OPERATION must be 'move' or 'copy', got: {self.file_operation}"
             )
 
+        if self.mainfeature_placement not in ["first_episode", "last_episode"]:
+            raise ValueError(
+                f"MAINFEATURE_PLACEMENT must be 'first_episode' or 'last_episode', got: {self.mainfeature_placement}"
+            )
+
         # Create input directory if it doesn't exist (warn user)
         if not self.input_dir.exists():
             print(f"⚠️  Warning: INPUT_DIR does not exist: {self.input_dir}")
@@ -61,7 +69,8 @@ class Config:
             f"  OUTPUT_DIR={self.output_dir},\n"
             f"  LOG_LEVEL={self.log_level},\n"
             f"  FILE_OPERATION={self.file_operation},\n"
-            f"  DELETE_SOURCE_AFTER_MOVE={self.delete_source_after_move}\n"
+            f"  DELETE_SOURCE_AFTER_MOVE={self.delete_source_after_move},\n"
+            f"  MAINFEATURE_PLACEMENT={self.mainfeature_placement}\n"
             f")"
         )
 

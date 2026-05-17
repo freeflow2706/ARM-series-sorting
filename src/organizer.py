@@ -8,21 +8,24 @@ from pathlib import Path
 from typing import Dict, Tuple, Optional
 from src.parser import FolderNameParser, EpisodeFileNameParser, EpisodeMappingAnalyzer
 from src.logger import get_logger
+from src.config import config
 
 
 class DVDDiscOrganizer:
     """Organizes a single DVD disc (folder) of ripped episodes."""
 
-    def __init__(self, disc_folder: Path, logger=None):
+    def __init__(self, disc_folder: Path, logger=None, config_instance=None):
         """
         Initialize organizer for a disc folder.
 
         Args:
             disc_folder: Path to the disc folder
             logger: Logger instance
+            config_instance: Config instance for reading settings
         """
         self.disc_folder = Path(disc_folder)
         self.logger = logger or get_logger()
+        self.config = config_instance or config
         self.extras_folder = self.disc_folder / "extras"
 
         # Parse folder name
@@ -75,7 +78,10 @@ class DVDDiscOrganizer:
 
         Handles E00 (title track):
         - If E00 exists in extras: It's the first episode
-        - If E00 missing: Assume it was skipped (was the title that plays all episodes), start with E01
+        - If E00 missing: Placement depends on MAINFEATURE_PLACEMENT setting
+          - first_episode: Main feature becomes E00 (for series with full title track)
+          - last_episode: Main feature becomes highest episode number (default)
+        - If no extras folder: Only main feature is returned as E01
 
         Returns:
             Dict {episode_number: file_path}
@@ -83,52 +89,87 @@ class DVDDiscOrganizer:
         episodes = {}
         main_feature_path = self._find_main_feature()
 
-        # Collect episodes from extras folder
-        if self.extras_folder.exists():
-            extras_episodes = []
-            # Search for any files (supports .mp4, .txt, etc.)
-            for video_file in self.extras_folder.glob("*"):
-                if not video_file.is_file():
-                    continue
+        # Case 1: extras folder doesn't exist
+        if not self.extras_folder.exists():
+            if main_feature_path:
+                # Only one episode (main feature) found in disc
+                episodes[1] = main_feature_path
+                self.logger.info(
+                    f"  ✓ No extras folder found. Using main feature as E01: {main_feature_path.name}"
+                )
+            else:
+                self.logger.warning(
+                    f"  ⚠️  No extras folder and no main feature found in: {self.disc_folder}"
+                )
+            return episodes
 
-                ep_num = EpisodeFileNameParser.extract_episode_number(video_file.name)
+        # Case 2: extras folder exists
+        extras_episodes = []
+        # Search for any files (supports .mp4, .txt, etc.)
+        for video_file in self.extras_folder.glob("*"):
+            if not video_file.is_file():
+                continue
 
-                if ep_num is not None:
-                    if EpisodeFileNameParser.validate_episode_number(ep_num):
-                        extras_episodes.append(ep_num)
-                        episodes[ep_num] = video_file
-                        if ep_num == 0:
-                            self.logger.debug(
-                                f"  Found title track (E00): {video_file.name}"
-                            )
-                        else:
-                            self.logger.debug(
-                                f"  Found episode: {video_file.name} (E{ep_num:02d})"
-                            )
+            ep_num = EpisodeFileNameParser.extract_episode_number(video_file.name)
+
+            if ep_num is not None:
+                if EpisodeFileNameParser.validate_episode_number(ep_num):
+                    extras_episodes.append(ep_num)
+                    episodes[ep_num] = video_file
+                    if ep_num == 0:
+                        self.logger.debug(
+                            f"  Found title track (E00): {video_file.name}"
+                        )
                     else:
-                        self.logger.warning(
-                            f"  ⚠️  Episode number out of range (0-99): {video_file.name} (E{ep_num})"
+                        self.logger.debug(
+                            # Das taucht auf in den Logs
+                            f"  Found episode: {video_file.name} (E{ep_num:02d})"
                         )
                 else:
                     self.logger.warning(
-                        f"  ⚠️  Could not extract episode number from: {video_file.name}"
+                        f"  ⚠️  Episode number out of range (0-99): {video_file.name} (E{ep_num})"
                     )
+            else:
+                self.logger.warning(
+                    f"  ⚠️  Could not extract episode number from: {video_file.name}"
+                )
 
-            # Find missing episode (main feature)
-            missing_ep = EpisodeMappingAnalyzer.find_missing_episode(extras_episodes)
-            if missing_ep is not None and main_feature_path:
+        # Find missing episode (main feature)
+        missing_ep = EpisodeMappingAnalyzer.find_missing_episode(extras_episodes)
+
+        if missing_ep is not None and main_feature_path:
+            max_ep = max(extras_episodes) if extras_episodes else 0
+
+            # Check if it's a real gap (missing_ep is within the sequence) or just max+1
+            # Real gap: missing_ep <= max_ep (e.g., [1,3,4] → missing_ep=2, max_ep=4)
+            # E00 exists: 0 in extras_episodes
+            is_real_gap = missing_ep <= max_ep
+            has_e00 = 0 in extras_episodes
+
+            if is_real_gap or has_e00:
+                # Real gap found or E00 exists - use find_missing_episode result
                 episodes[missing_ep] = main_feature_path
                 self.logger.info(
                     f"  ✓ Main feature identified as E{missing_ep:02d}: {main_feature_path.name} → {self.disc_folder.name}"
                 )
-            elif missing_ep is None and 0 not in extras_episodes:
-                # E00 not found: assume it was skipped (title track)
-                self.logger.info(
-                    f"  ℹ️  E00 not found in {self.disc_folder.name} - Title track was skipped, starting with E01"
-                )
-        else:
-            self.logger.warning(f"  ⚠️  extras folder not found in: {self.disc_folder}")
-
+            else:
+                # No real gap and no E00 - apply MAINFEATURE_PLACEMENT setting
+                if self.config.mainfeature_placement == "first_episode":
+                    episodes[0] = main_feature_path
+                    self.logger.info(
+                        # Das taucht auf in den Logs
+                        f"  ✓ Main feature placed as E00 (first_episode): {main_feature_path.name}"
+                    )
+                else:  # last_episode (default)
+                    episodes[missing_ep] = main_feature_path
+                    self.logger.info(
+                        f"  ✓ Main feature placed as E{missing_ep:02d} (last_episode): {main_feature_path.name}"
+                    )
+        elif main_feature_path:
+            # No missing_ep found but main feature exists
+            self.logger.info(
+                f"  ℹ️  E00 not found in {self.disc_folder.name} - Title track was skipped, starting with E01"
+            )
         return episodes
 
     def get_all_episodes_for_disc(self) -> Dict[int, Path]:
@@ -145,7 +186,12 @@ class SeriesOrganizer:
     """Organizes all discs of a series into output directory."""
 
     def __init__(
-        self, output_base: Path, logger=None, file_operation="move", delete_source=True
+        self,
+        output_base: Path,
+        logger=None,
+        file_operation="move",
+        delete_source=True,
+        config_instance=None,
     ):
         """
         Initialize series organizer.
@@ -155,11 +201,13 @@ class SeriesOrganizer:
             logger: Logger instance
             file_operation: "move" or "copy"
             delete_source: Whether to delete source after move
+            config_instance: Config instance for reading settings
         """
         self.output_base = Path(output_base)
         self.logger = logger or get_logger()
         self.file_operation = file_operation
         self.delete_source = delete_source
+        self.config = config_instance or config
 
         # Collect discs by series and season
         self.disc_organizers: Dict[str, Dict[int, DVDDiscOrganizer]] = {}
@@ -171,7 +219,7 @@ class SeriesOrganizer:
         Args:
             disc_folder: Path to disc folder
         """
-        organizer = DVDDiscOrganizer(disc_folder, self.logger)
+        organizer = DVDDiscOrganizer(disc_folder, self.logger, self.config)
         metadata = organizer.get_metadata()
 
         series_name = metadata["series_name"]
@@ -204,6 +252,7 @@ class SeriesOrganizer:
             seasons = self.disc_organizers[series_name]
 
             for season in sorted(seasons.keys()):
+                ### Das taucht auf in den Logs
                 self.logger.info(f"\n  Season {season:02d}:")
 
                 discs = seasons[season]

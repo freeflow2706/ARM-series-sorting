@@ -9,6 +9,8 @@ Ein Python-Tool zur automatischen Reorganisation und Umbenennung von mit der Aut
 - ✅ **E00 (Title Track) Handling** - Automatische Erkennung und Renummerierung
 - ✅ **Finale Episodennummern starten immer bei E01** - auch wenn lokal mit E00 begonnen wird
 - ✅ Automatische Identifikation fehlender Episoden (Main Feature Detection)
+- ✅ **Flexible Main-Feature Platzierung** - Konfigurierbar als erste (E00) oder letzte Episode
+- ✅ **Extras-Ordner optional** - Unterstützung für Single-Episode-Discs ohne Extras-Ordner
 - ✅ Disc-übergreifende Episode-Nummerierung
 - ✅ Interaktive Fehlerbehandlung bei Parsing-Problemen
 - ✅ Detailliertes Logging
@@ -47,6 +49,13 @@ FILE_OPERATION=move
 
 # Automatisch Quell-Ordner löschen nach Verarbeitung? (True/False)
 DELETE_SOURCE_AFTER_MOVE=True
+
+# Platzierung des Main Features, wenn E00 fehlt: first_episode oder last_episode
+# first_episode: Main Feature wird als E00 vor alle anderen Episoden gesetzt
+#                (für Serien mit vollständigem Titel-Track der von ARM übersprungen wurde)
+# last_episode: Main Feature wird nach allen anderen Episoden als höchste Zahl gesetzt (Standard)
+#               (für Serien ohne vollständigen Titel-Track oder einzelne Episoden)
+MAINFEATURE_PLACEMENT=last_episode
 ```
 
 ## Verwendung
@@ -155,7 +164,9 @@ extras/ enthält: B2_t01.mp4, B2_t03.mp4, B2_t04.mp4
 **Szenario 3: Keine Lücke, höchste Nummer ist Main Feature (keine E00)**
 ```
 extras/ enthält: B2_t01.mp4, B2_t02.mp4, B2_t03.mp4
-→ E00 nicht vorhanden → Alle vorhanden → Main Feature = E04 (max+1)
+→ E00 nicht vorhanden → Alle vorhanden → Platzierung abhängig von MAINFEATURE_PLACEMENT:
+  • first_episode: Main Feature = E00
+  • last_episode: Main Feature = E04 (max+1)
 ```
 
 **Szenario 4: Title Track + Lücke in E01+ (Edge-Case) ⚠️**
@@ -172,6 +183,29 @@ extras/ enthält: B3_t00.mp4
 → Main Feature = E01 (erste Episode nach Title Track)
 → Output: E00→E01, MainFeature→E02
 ```
+
+**Szenario 6: Kein extras Ordner vorhanden (Single Episode) ✅ NEU**
+```
+Ordner: SHOW_SEASON_3_DISC_1/
+  ├── SHOW_SEASON_3_DISC_1.mp4  (Main Feature)
+  └── (kein extras/ Ordner)
+→ extras/ nicht gefunden → Main Feature wird als E01 verwendet
+→ Output: SHOW_S03_E01.mp4
+```
+
+### MAINFEATURE_PLACEMENT Konfiguration
+
+Die neue `MAINFEATURE_PLACEMENT` Option steuert das Verhalten, wenn:
+- Der extras-Ordner existiert
+- E00 fehlt in den extras
+- Keine Lücke in den Episodennummern vorhanden ist
+
+**Zwei Optionen:**
+
+| Option | Verhalten | Beispiel | Geeignet für |
+|--------|-----------|---------|---|
+| `first_episode` | Main Feature wird **vor** alle Episoden als E00 platziert | extras: E01,E02,E03 → Output: E00,E01,E02,E03 | Serien mit vollständigem Titel-Track (komplette Intro) |
+| `last_episode` | Main Feature wird **nach** allen Episoden als höchste Nummer platziert | extras: E01,E02,E03 → Output: E01,E02,E03,E04 | Serien ohne Titel-Track oder Standard-DVDs |
 
 ## Fehlerbehandlung
 
@@ -200,6 +234,23 @@ Falls ein Disc nur den Title Track enthält:
 - Jetzt: ✅ Korrekt - Main Feature wird E01 zugeordnet
 
 Dies wird durch die `BREAKING_BAD Season 6 Disc 3` Test-Show überprüft.
+
+**Kein extras Ordner vorhanden (Single Episode)**
+
+Falls auf einer Disc kein extras-Ordner vorhanden ist (z.B. bei DVDs mit nur einer gerippten Folge):
+- Eingabe: `SHOW_SEASON_3_DISC_1/` mit nur `SHOW_SEASON_3_DISC_1.mp4` im Root
+- Früher: ⚠️ Warnung - "extras folder not found"
+- Jetzt: ✅ Korrekt - Main Feature wird als E01 erkannt und verwendet
+
+Dies ist nützlich für DVD-Box-Sets, bei denen manche Discs nur eine einzelne Episode enthalten.
+
+**Main Feature Platzierung ohne E00**
+
+Wenn E00 fehlt und keine Lücken vorhanden sind, hängt die Platzierung vom `MAINFEATURE_PLACEMENT` Setting ab:
+- `first_episode`: Main Feature wird E00 (nur wenn konfiguriert)
+- `last_episode`: Main Feature wird höchste Nummer (Standard)
+
+Dies ist nützlich um zwischen Serien mit vollständigem Titel-Track (der von ARM übersprungen wurde) und Standard-DVDs zu unterscheiden.
 
 ## Testing
 

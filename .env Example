@@ -18,3 +18,8 @@ FILE_OPERATION=move
 
 # Automatisch Quell-Ordner löschen nach Verarbeitung? (True/False)
 DELETE_SOURCE_AFTER_MOVE=False
+
+# Platzierung des Main Features, wenn E00 fehlt: first_episode (E00) oder last_episode (höchste Zahl)
+# first_episode: Main Feature wird vor alle anderen Episoden als E00 gesetzt (für Serien mit vollständigem Titel-Track)
+# last_episode: Main Feature wird nach allen anderen Episoden als höchste Zahl gesetzt (Standard)
+MAINFEATURE_PLACEMENT=first_episode

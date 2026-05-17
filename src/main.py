@@ -44,6 +44,7 @@ def main():
         logger=logger,
         file_operation=config.file_operation,
         delete_source=config.delete_source_after_move,
+        config_instance=config,
     )
 
     # Add each disc folder
